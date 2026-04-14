@@ -1,0 +1,17 @@
+{
+  "run_id": "arch_v1_refined",
+  "source": "carried_over_from_v3",
+  "status": "verified_baseline_reference",
+  "metrics": {
+    "final_val_bpb": 1.86808647,
+    "final_val_loss": 3.15418576,
+    "final_artifact_size_bytes": 4971557,
+    "total_submission_size_int8_zlib": 5019795,
+    "code_size_bytes": 48238
+  },
+  "notes": [
+    "This is a carried-over baseline reference for V4.",
+    "Not an official leaderboard claim.",
+    "Placeholder train.log and final_model.int8.ptz are present until original artifacts are copied."
+  ]
+}
