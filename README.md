@@ -1,51 +1,56 @@
-# Parameter Golf V4 Workspace
+# OpenAI Parameter Golf V4 Workspace
 
-This repository is a **clean, competition-focused OpenAI Parameter Golf workspace**.
+## What this repository is
 
-It is aligned to the official challenge workflow in [`openai/parameter-golf`](https://github.com/openai/parameter-golf), with FineWeb `val_bpb` as the primary benchmark metric and the official submission artifact budget of **< 16,000,000 bytes**.
+This repository is a focused workspace for OpenAI Parameter Golf V4 development, evaluation, and submission packaging.
 
-## Objective
+It is organized for reproducibility and technical review, with the official baseline stack and evaluation path treated as the source of truth.
 
-V4 starts from a clean baseline and is focused on disciplined progress from a proven carried-over baseline in the ~`1.868` `val_bpb` region toward competitive top-tier performance.
+## Current best official V4 baseline result
 
-This repository is intended to be:
-- reproducible on the official RunPod Parameter Golf template,
-- easy to review by challenge/grant/research evaluators,
-- explicit about what is official path vs archived history.
+Official V4 baseline run:
 
-## Current carried-over reference baseline (from V3)
+- `run_id`: `v4_official_baseline`
+- `final_val_bpb`: `1.34569660`
+- `final_val_loss`: `2.7215235`
+- `final_artifact_size_bytes`: `12715304`
+- `total_submission_size_int8_zlib`: `12762990`
 
-Best verified V3 run (carried over as reference baseline):
+This is the current official baseline reference for this repository.
+
+## Historical V3 reference result
+
+Carried-over V3 reference run:
 
 - `run_id`: `arch_v1_refined`
 - `final_val_bpb`: `1.86808647`
-- `final_val_loss`: `3.15418576`
-- `final_artifact_size_bytes`: `4971557`
-- `total_submission_size_int8_zlib`: `5019795`
-- `code_size_bytes`: `48238`
 
-> Note: this is a carried-over internal baseline reference, not a claim about current official leaderboard rank.
+This value is maintained for historical continuity only and should not be interpreted as the current V4 baseline.
 
 ## Repository layout
 
-- `train_gpt.py` — single primary training/evaluation script for the active V4 path.
-- `STATUS.md` — current program status and goals.
-- `records/best_run/` — canonical carried-over baseline record for V4 continuity.
-- `docs/v4/` — planning docs for the current V4 phase.
-- `archive/` — historical material moved out of the active submission path.
+- `train_gpt.py` — primary V4 training/evaluation entrypoint.
+- `data/` — dataset utilities and data preparation scripts for the official path.
+- `records/` — run records and artifacts for tracked evaluations.
+- `records/v4_official_baseline/` — canonical record for the current official V4 baseline run.
+- `docs/v4/` — V4 technical notes, plans, and workflow documentation.
+- `archive/` (if present) — historical or non-active experiment material kept for traceability.
 
-## Official benchmark path vs archive
+## Official workflow
 
-### Active / official-facing path
-Use the root-level workflow and `records/best_run/` when revalidating or reporting V4 progress.
+- V4 uses the official OpenAI Parameter Golf baseline stack as the source of truth.
+- Evaluation is run on the official FineWeb path.
+- Submission artifact size must stay under 16 MB.
+- The main goal is to move from `1.3457` toward competitive territory through disciplined iteration.
 
-### Archived historical material
-Legacy experiments and prior record folders are kept under `archive/` for traceability only. They are **not** the active submission path for V4.
+## Current objective
 
-## Benchmark policy guardrails
+- First stabilize and reproduce the official baseline environment.
+- Then improve BPB through clean, controlled experiments.
+- Custom datasets are not in the main competition path yet.
 
-- FineWeb + `val_bpb` remains the official benchmark path.
-- Submission artifact must remain under `16,000,000` bytes total.
-- No fabricated results.
-- No custom dataset integration in this phase.
-- Prefer minimal, high-signal, reproducible changes.
+## Near-term upgrade plan
+
+1. Learning-rate/schedule refinement.
+2. Capacity/architecture refinement.
+3. Compression/export refinement.
