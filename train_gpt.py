@@ -58,6 +58,9 @@ class Hyperparameters:
     train_seq_len = int(os.environ.get("TRAIN_SEQ_LEN", 1024))
     max_wallclock_seconds = float(os.environ.get("MAX_WALLCLOCK_SECONDS", 600.0))
     qk_gain_init = float(os.environ.get("QK_GAIN_INIT", 1.5))
+    parallel_residual = bool(int(os.environ.get("PARALLEL_RESIDUAL", "0")))
+    recurrence_layers = os.environ.get("RECURRENCE_LAYERS", "")
+    recurrence_steps = int(os.environ.get("RECURRENCE_STEPS", 1))
 
     # Model shape.
     vocab_size = int(os.environ.get("VOCAB_SIZE", 1024))
@@ -77,7 +80,9 @@ class Hyperparameters:
     tied_embed_init_std = float(os.environ.get("TIED_EMBED_INIT_STD", 0.005))
     matrix_lr = float(os.environ.get("MATRIX_LR", 0.04))
     scalar_lr = float(os.environ.get("SCALAR_LR", 0.04))
+    scalar_wd = float(os.environ.get("SCALAR_WD", 0.0))
     muon_momentum = float(os.environ.get("MUON_MOMENTUM", 0.95))
+    muon_wd = float(os.environ.get("MUON_WD", 0.0))
     muon_backend_steps = int(os.environ.get("MUON_BACKEND_STEPS", 5))
     muon_momentum_warmup_start = float(os.environ.get("MUON_MOMENTUM_WARMUP_START", 0.85))
     muon_momentum_warmup_steps = int(os.environ.get("MUON_MOMENTUM_WARMUP_STEPS", 500))
@@ -92,6 +97,21 @@ class Hyperparameters:
     sliding_batch_size = int(os.environ.get("SLIDING_BATCH_SIZE", 64))
     eval_only = bool(int(os.environ.get("EVAL_ONLY", "0")))
     load_artifact_path = os.environ.get("LOAD_ARTIFACT_PATH", "")
+
+
+def parse_layer_indices(raw: str, num_layers: int) -> tuple[int, ...]:
+    if not raw.strip():
+        return ()
+    layers: list[int] = []
+    for item in raw.split(","):
+        idx_str = item.strip()
+        if not idx_str:
+            continue
+        idx = int(idx_str)
+        if idx < 0 or idx >= num_layers:
+            raise ValueError(f"RECURRENCE_LAYERS index {idx} is out of range [0, {num_layers - 1}]")
+        layers.append(idx)
+    return tuple(sorted(set(layers)))
 
 # -----------------------------
 # MUON OPTIMIZER 
@@ -117,10 +137,18 @@ def zeropower_via_newtonschulz5(G: Tensor, steps: int = 10, eps: float = 1e-7) -
 
 
 class Muon(torch.optim.Optimizer):
-    def __init__(self, params, lr: float, momentum: float, backend_steps: int, nesterov: bool = True):
+    def __init__(
+        self,
+        params,
+        lr: float,
+        momentum: float,
+        backend_steps: int,
+        nesterov: bool = True,
+        weight_decay: float = 0.0,
+    ):
         super().__init__(
             params,
-            dict(lr=lr, momentum=momentum, backend_steps=backend_steps, nesterov=nesterov),
+            dict(lr=lr, momentum=momentum, backend_steps=backend_steps, nesterov=nesterov, weight_decay=weight_decay),
         )
 
     @torch.no_grad()
@@ -142,6 +170,7 @@ class Muon(torch.optim.Optimizer):
             momentum = group["momentum"]
             backend_steps = group["backend_steps"]
             nesterov = group["nesterov"]
+            weight_decay = group["weight_decay"]
 
             total_params = sum(int(p.numel()) for p in params)
             updates_flat = torch.zeros(total_params, device=params[0].device, dtype=torch.bfloat16)
@@ -169,6 +198,8 @@ class Muon(torch.optim.Optimizer):
             curr = 0
             for p in params:
                 g = updates_flat[curr : curr + p.numel()].view_as(p).to(dtype=p.dtype)
+                if weight_decay:
+                    p.mul_(1.0 - lr * weight_decay)
                 p.add_(g, alpha=-lr)
                 curr += p.numel()
 
@@ -720,6 +751,7 @@ class Block(nn.Module):
         mlp_mult: int,
         rope_base: float,
         qk_gain_init: float,
+        parallel_residual: bool,
     ):
         super().__init__()
         self.attn_norm = RMSNorm()
@@ -729,13 +761,20 @@ class Block(nn.Module):
         self.attn_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32))
         self.mlp_scale = nn.Parameter(torch.ones(dim, dtype=torch.float32))
         self.resid_mix = nn.Parameter(torch.stack((torch.ones(dim), torch.zeros(dim))).float())
+        self.parallel_residual = parallel_residual
 
     def forward(self, x: Tensor, x0: Tensor) -> Tensor:
         mix = self.resid_mix.to(dtype=x.dtype)
         x = mix[0][None, None, :] * x + mix[1][None, None, :] * x0
-        attn_out = self.attn(self.attn_norm(x))
-        x = x + self.attn_scale.to(dtype=x.dtype)[None, None, :] * attn_out
-        x = x + self.mlp_scale.to(dtype=x.dtype)[None, None, :] * self.mlp(self.mlp_norm(x))
+        attn_in = self.attn_norm(x)
+        attn_out = self.attn(attn_in)
+        if self.parallel_residual:
+            mlp_out = self.mlp(self.mlp_norm(x))
+            x = x + self.attn_scale.to(dtype=x.dtype)[None, None, :] * attn_out
+            x = x + self.mlp_scale.to(dtype=x.dtype)[None, None, :] * mlp_out
+        else:
+            x = x + self.attn_scale.to(dtype=x.dtype)[None, None, :] * attn_out
+            x = x + self.mlp_scale.to(dtype=x.dtype)[None, None, :] * self.mlp(self.mlp_norm(x))
         return x
 
 
@@ -753,6 +792,9 @@ class GPT(nn.Module):
         logit_softcap: float,
         rope_base: float,
         qk_gain_init: float,
+        parallel_residual: bool,
+        recurrence_layers: tuple[int, ...],
+        recurrence_steps: int,
     ):
         super().__init__()
         if logit_softcap <= 0.0:
@@ -760,6 +802,8 @@ class GPT(nn.Module):
         self.tie_embeddings = tie_embeddings
         self.tied_embed_init_std = tied_embed_init_std
         self.logit_softcap = logit_softcap
+        self.recurrence_layers = set(recurrence_layers)
+        self.recurrence_steps = recurrence_steps
         self.tok_emb = nn.Embedding(vocab_size, model_dim)
         self.num_encoder_layers = num_layers // 2
         self.num_decoder_layers = num_layers - self.num_encoder_layers
@@ -774,6 +818,7 @@ class GPT(nn.Module):
                     mlp_mult,
                     rope_base,
                     qk_gain_init,
+                    parallel_residual,
                 )
                 for i in range(num_layers)
             ]
@@ -792,6 +837,12 @@ class GPT(nn.Module):
                 nn.init.zeros_(module.weight)
 
     def forward_logits(self, input_ids: Tensor) -> Tensor:
+        def apply_block(block_idx: int, h: Tensor) -> Tensor:
+            steps = self.recurrence_steps if block_idx in self.recurrence_layers else 1
+            for _ in range(steps):
+                h = self.blocks[block_idx](h, x0)
+            return h
+
         x = self.tok_emb(input_ids)
         x = F.rms_norm(x, (x.size(-1),))
         x0 = x
@@ -799,12 +850,12 @@ class GPT(nn.Module):
 
         # First half stores skips; second half reuses them in reverse order.
         for i in range(self.num_encoder_layers):
-            x = self.blocks[i](x, x0)
+            x = apply_block(i, x)
             skips.append(x)
         for i in range(self.num_decoder_layers):
             if skips:
                 x = x + self.skip_weights[i].to(dtype=x.dtype)[None, None, :] * skips.pop()
-            x = self.blocks[self.num_encoder_layers + i](x, x0)
+            x = apply_block(self.num_encoder_layers + i, x)
 
         x = self.final_norm(x)
         if self.tie_embeddings:
@@ -830,6 +881,9 @@ def main() -> None:
 
     code = Path(__file__).read_text(encoding="utf-8")
     args = Hyperparameters()
+    if args.recurrence_steps < 1:
+        raise ValueError(f"RECURRENCE_STEPS must be >= 1, got {args.recurrence_steps}")
+    recurrence_layers = parse_layer_indices(args.recurrence_layers, args.num_layers)
     zeropower_via_newtonschulz5 = torch.compile(zeropower_via_newtonschulz5)
 
     # -----------------------------
@@ -932,6 +986,9 @@ def main() -> None:
         logit_softcap=args.logit_softcap,
         rope_base=args.rope_base,
         qk_gain_init=args.qk_gain_init,
+        parallel_residual=args.parallel_residual,
+        recurrence_layers=recurrence_layers,
+        recurrence_steps=args.recurrence_steps,
     ).to(device).bfloat16()
     for module in base_model.modules():
         if isinstance(module, CastedLinear):
@@ -970,11 +1027,19 @@ def main() -> None:
         lr=args.matrix_lr,
         momentum=args.muon_momentum,
         backend_steps=args.muon_backend_steps,
+        weight_decay=args.muon_wd,
     )
     for group in optimizer_muon.param_groups:
         group["base_lr"] = args.matrix_lr
     optimizer_scalar = torch.optim.Adam(
-        [{"params": scalar_params, "lr": args.scalar_lr, "base_lr": args.scalar_lr}],
+        [
+            {
+                "params": scalar_params,
+                "lr": args.scalar_lr,
+                "base_lr": args.scalar_lr,
+                "weight_decay": args.scalar_wd,
+            }
+        ],
         betas=(args.beta1, args.beta2),
         eps=args.adam_eps,
         fused=True,
@@ -997,7 +1062,12 @@ def main() -> None:
     log0(
         f"tie_embeddings:{args.tie_embeddings} embed_lr:{token_lr} "
         f"head_lr:{args.head_lr if base_model.lm_head is not None else 0.0} "
-        f"matrix_lr:{args.matrix_lr} scalar_lr:{args.scalar_lr}"
+        f"matrix_lr:{args.matrix_lr} scalar_lr:{args.scalar_lr} "
+        f"muon_wd:{args.muon_wd} scalar_wd:{args.scalar_wd}"
+    )
+    log0(
+        f"parallel_residual:{args.parallel_residual} recurrence_layers:{list(recurrence_layers)} "
+        f"recurrence_steps:{args.recurrence_steps}"
     )
     log0(
         f"train_batch_tokens:{args.train_batch_tokens} train_seq_len:{args.train_seq_len} "
