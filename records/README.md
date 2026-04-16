@@ -1,8 +1,10 @@
 # Records
 
-`records/` is reserved for canonical V4 run records that represent active baseline/progress.
+`records/` stores canonical, actively referenced experiment records for V5.
 
-Current canonical baseline:
-- `records/best_run/`
+## Current contents
 
-Historical experiment folders have been moved to `archive/` to keep the active V4 path clean.
+- `records/v4_reference/` — minimal carried-over V4 baseline snapshot for V5 planning.
+- `records/best_run/` — legacy V4 artifact set retained for traceability.
+
+V5 should promote new canonical records here as clean, exact, reproducible outputs.
