@@ -1,56 +1,49 @@
-# OpenAI Parameter Golf V4 Workspace
+# OpenAI Parameter Golf — V5 Workspace
 
-## What this repository is
+This repository is a **clean V5 workspace** for OpenAI Parameter Golf.
 
-This repository is a focused workspace for OpenAI Parameter Golf V4 development, evaluation, and submission packaging.
+It is organized for professional, competition-focused iteration from a known V4 reference region toward improved validation bits-per-byte (val_bpb), while keeping official-baseline compatibility and reproducibility standards.
 
-It is organized for reproducibility and technical review, with the official baseline stack and evaluation path treated as the source of truth.
+## Carried-over V4 reference (historical baseline)
 
-## Current best official V4 baseline result
+The current strongest carried-over exact reference from V4 is:
 
-Official V4 baseline run:
+- `run_id`: `v4_top10_safe`
+- `final_val_bpb`: **1.22064591**
+- `final_val_loss`: 2.06100949
+- `train_seq_len`: 4096
+- `iterations`: 5000
+- `warmup_steps`: 20
+- `max_wallclock_seconds`: 0
 
-- `run_id`: `v4_official_baseline`
-- `final_val_bpb`: `1.34569660`
-- `final_val_loss`: `2.7215235`
-- `final_artifact_size_bytes`: `12715304`
-- `total_submission_size_int8_zlib`: `12762990`
+Stable backup reference:
 
-This is the current official baseline reference for this repository.
+- `run_id`: `v4_restore_seq4096_exact`
+- `final_val_bpb`: **1.22854984**
 
-## Historical V3 reference result
+See `records/v4_reference/README.md` for the preserved reference snapshot.
 
-Carried-over V3 reference run:
+## Current V5 objective
 
-- `run_id`: `arch_v1_refined`
-- `final_val_bpb`: `1.86808647`
+- Beat the carried-over exact reference **1.22064591** cleanly.
+- Maintain official-compatible assumptions for training and evaluation.
+- Keep iteration loops short, traceable, and audit-ready.
 
-This value is maintained for historical continuity only and should not be interpreted as the current V4 baseline.
+## Future work (deferred in this step)
+
+- **Step 2 (deferred):** auxiliary error/training dataset integration and ZIP export.
+- **Step 3 (deferred):** exact RunPod training and evaluation command set.
 
 ## Repository layout
 
-- `train_gpt.py` — primary V4 training/evaluation entrypoint.
-- `data/` — dataset utilities and data preparation scripts for the official path.
-- `records/` — run records and artifacts for tracked evaluations.
-- `records/v4_official_baseline/` — canonical record for the current official V4 baseline run.
-- `docs/v4/` — V4 technical notes, plans, and workflow documentation.
-- `archive/` (if present) — historical or non-active experiment material kept for traceability.
+- `STATUS.md` — current project state and immediate objectives.
+- `docs/v5/` — V5 roadmap, target path, and design principles.
+- `records/` — compact, structured experiment record storage.
+- `records/v4_reference/` — carried-over V4 baseline reference only.
+- `tools/` — utility scripts and operational helpers for V5 workflows.
+- `data/` — data notes/placeholders and data-related utilities (no auxiliary dataset added yet in V5 step 1).
+- `archive/` — optional historical storage; not the canonical source of truth for active V5 progress.
 
-## Official workflow
+## Compatibility stance
 
-- V4 uses the official OpenAI Parameter Golf baseline stack as the source of truth.
-- Evaluation is run on the official FineWeb path.
-- Submission artifact size must stay under 16 MB.
-- The main goal is to move from `1.3457` toward competitive territory through disciplined iteration.
-
-## Current objective
-
-- First stabilize and reproduce the official baseline environment.
-- Then improve BPB through clean, controlled experiments.
-- Custom datasets are not in the main competition path yet.
-
-## Near-term upgrade plan
-
-1. Learning-rate/schedule refinement.
-2. Capacity/architecture refinement.
-3. Compression/export refinement.
+V5 starts from **official-compatible training/evaluation assumptions** and avoids unverified shortcuts. Any future optimization work should preserve exact run traceability (run IDs, configs, logs, and eval outputs) and prioritize measurable val_bpb improvement.

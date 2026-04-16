@@ -1,35 +1,29 @@
-# V4 Status
+# V5 Status
 
-## State
+## Current state
 
-V4 is a **clean restart** of this workspace for OpenAI Parameter Golf development.
+- V5 is a **clean restart** focused on disciplined, competition-ready execution.
+- Scope in this step is repository structure and baseline reference preservation only.
 
-## Carried-over best verified baseline (from V3)
+## Carried-over V4 reference
 
-- `run_id`: `arch_v1_refined`
-- `final_val_bpb`: `1.86808647`
-- `final_val_loss`: `3.15418576`
-- `final_artifact_size_bytes`: `4971557`
-- `total_submission_size_int8_zlib`: `5019795`
-- `code_size_bytes`: `48238`
+- Best recent exact V4 run:
+  - `run_id`: `v4_top10_safe`
+  - `final_val_bpb`: **1.22064591**
+  - `final_val_loss`: 2.06100949
+  - `train_seq_len`: 4096
+  - `iterations`: 5000
+  - `warmup_steps`: 20
+  - `max_wallclock_seconds`: 0
+- Stable backup:
+  - `run_id`: `v4_restore_seq4096_exact`
+  - `final_val_bpb`: **1.22854984**
 
-This baseline is tracked in `records/best_run/` as V4's starting reference point.
+## Next objective
 
-## Current goal
+- Beat **1.22064591** cleanly under official-compatible assumptions.
 
-Move from the current ~`1.868` baseline region toward competitive **top-10 / top-tier** territory through disciplined, high-signal iteration.
+## Deferred items
 
-Project target framing for internal planning (not official leaderboard claims):
-
-- top 10 target zone: `<= 1.115`
-- strong contender zone: `<= 1.086`
-- active #1 fight zone: `<= 1.080`
-- long-shot championship zone: `~1.07x` or lower
-
-## Current constraints
-
-- Keep compatibility with official Parameter Golf workflow.
-- FineWeb `val_bpb` remains the official benchmark metric.
-- Submission artifact must remain under `16,000,000` bytes.
-- Target environment is the official RunPod Parameter Golf template.
-- **Custom datasets are frozen for now.**
+- Step 2: auxiliary dataset integration and ZIP export (deferred).
+- Step 3: exact RunPod training/evaluation instructions (deferred).
